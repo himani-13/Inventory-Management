@@ -12,9 +12,19 @@ import {
   Cell
 } from "recharts";
 
-const COLORS = ["#ef4444", "#f59e0b", "#22c55e"];
+const ALERT_COLORS = {
+  CRITICAL: "#dc2626", // red
+  WARNING: "#f59e0b",  // yellow
+  HEALTHY: "#16a34a",  // green
+  OVERSTOCK: "#5f19d8" // purple
+};
 
-/* ---------- frontend demo data ---------- */
+const fallbackInventory = [
+  { item: "Item A", stock: 20, forecast: 100 },
+  { item: "Item B", stock: 60, forecast: 100 },
+  { item: "Item C", stock: 90, forecast: 100 },
+  { item: "Item D", stock: 180, forecast: 100 }
+];
 
 const fallbackTrend = [
   { month: "Jan", qty: 100 },
@@ -22,116 +32,89 @@ const fallbackTrend = [
   { month: "Mar", qty: 150 }
 ];
 
-const fallbackRisk = [
-  { name: "HIGH", value: 4 },
-  { name: "MEDIUM", value: 3 },
-  { name: "LOW", value: 6 }
-];
-
-/*  👉 backend abhi nahi hai to false hi rakho
-    baad me sirf true kar dena  */
 const USE_API = false;
 
-export default function RiskDashboard() {
-  const [trend, setTrend] = useState(fallbackTrend);
-  const [riskSplit, setRiskSplit] = useState(fallbackRisk);
+function getRiskStatus(stock, forecast) {
+  const percent = (stock / forecast) * 100;
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  if (percent < 25)
+    return { label: "CRITICAL", color: ALERT_COLORS.CRITICAL, action: "Immediate Reorder" };
+
+  if (percent >= 25 && percent <= 75)
+    return { label: "WARNING", color: ALERT_COLORS.WARNING, action: "Review Reorder" };
+
+  if (percent > 150)
+    return { label: "OVERSTOCK", color: ALERT_COLORS.OVERSTOCK, action: "Run Discount / Promotion" };
+
+  return { label: "HEALTHY", color: ALERT_COLORS.HEALTHY, action: "No Action" };
+}
+
+export default function RiskDashboard() {
+  const [inventory, setInventory] = useState(fallbackInventory);
+  const [trend, setTrend] = useState(fallbackTrend);
 
   const ran = useRef(false);
 
   useEffect(() => {
     if (ran.current) return;
     ran.current = true;
-
     if (!USE_API) return;
-
-    async function load() {
-      try {
-        setLoading(true);
-
-        const t = await fetch("/api/charts/trend");
-        const r = await fetch("/api/charts/risk-split");
-
-        if (!t.ok || !r.ok) throw new Error();
-
-        const trendData = await t.json();
-        const riskData = await r.json();
-
-        setTrend(trendData);
-        setRiskSplit(riskData);
-      } catch {
-        setError("Backend not available – showing demo data");
-        setTrend(fallbackTrend);
-        setRiskSplit(fallbackRisk);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    load();
   }, []);
 
-  if (loading) {
-    return (
-      <div style={styles.center}>
-        <h3>Loading Risk Dashboard...</h3>
-      </div>
-    );
-  }
+  const riskCount = inventory.reduce((acc, item) => {
+    const status = getRiskStatus(item.stock, item.forecast).label;
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {});
+
+  const riskDonutData = Object.keys(riskCount).map(key => ({
+    name: key,
+    value: riskCount[key],
+    fill: ALERT_COLORS[key]
+  }));
+
+  const totalRiskRecords = inventory.length;
+  const highRiskCases = inventory.filter(
+    item => getRiskStatus(item.stock, item.forecast).label === "CRITICAL"
+  ).length;
+
+  const totalVsHighData = [
+    { name: "High Risk", value: highRiskCases, fill: ALERT_COLORS.CRITICAL },
+    { name: "Others", value: totalRiskRecords - highRiskCases, fill: "#e5e7eb" }
+  ];
 
   return (
     <div style={styles.page}>
-      <h2 style={styles.title}>Risk & Finance Monitoring</h2>
-
-      {error && (
-        <div style={styles.warningBox}>
-          {error}
-        </div>
-      )}
+      <h2 style={styles.title}>Risk & Inventory Monitoring</h2>
 
       <div style={styles.grid}>
 
-        {/* ---------- Trend ---------- */}
         <div style={styles.card}>
           <h4>Monthly Risk Transactions Trend</h4>
-
-          <ResponsiveContainer width="100%" height={280}>
+          <ResponsiveContainer width="100%" height={250}>
             <LineChart data={trend}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis />
               <Tooltip />
-              <Line
-                type="monotone"
-                dataKey="qty"
-                stroke="#2563eb"
-                strokeWidth={3}
-              />
+              <Line type="monotone" dataKey="qty" stroke="#2563eb" strokeWidth={3} />
             </LineChart>
           </ResponsiveContainer>
         </div>
 
-        {/* ---------- Risk split ---------- */}
         <div style={styles.card}>
-          <h4>Risk Category Split</h4>
-
-          <ResponsiveContainer width="100%" height={280}>
+          <h4>Risk Alert Distribution</h4>
+          <ResponsiveContainer width="100%" height={250}>
             <PieChart>
               <Pie
-                data={riskSplit}
+                data={riskDonutData}
                 dataKey="value"
-                nameKey="name"
                 innerRadius={60}
-                outerRadius={100}
-                label
+                outerRadius={95}
+                paddingAngle={3}
               >
-                {riskSplit.map((_, i) => (
-                  <Cell
-                    key={i}
-                    fill={COLORS[i % COLORS.length]}
-                  />
+                {riskDonutData.map((e, i) => (
+                  <Cell key={i} fill={e.fill} />
                 ))}
               </Pie>
               <Tooltip />
@@ -139,19 +122,52 @@ export default function RiskDashboard() {
           </ResponsiveContainer>
         </div>
 
-        {/* ---------- KPIs ---------- */}
         <div style={styles.card}>
-          <h4>Total Risk Records</h4>
-          <p style={styles.bigNumber}>
-            {riskSplit.reduce((s, x) => s + x.value, 0)}
-          </p>
+          <h4>Total Risk Overview</h4>
+
+          <ResponsiveContainer width="100%" height={250}>
+            <PieChart>
+              <Pie
+                data={totalVsHighData}
+                dataKey="value"
+                innerRadius={60}
+                outerRadius={95}
+                paddingAngle={2}
+              >
+                {totalVsHighData.map((e, i) => (
+                  <Cell key={i} fill={e.fill} />
+                ))}
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+
+          <div style={styles.centerText}>
+            <div style={styles.totalNumber}>{totalRiskRecords}</div>
+            <div style={styles.subText}>
+              High Risk:{" "}
+              <span style={{ color: ALERT_COLORS.CRITICAL, fontWeight: 600 }}>
+                {highRiskCases}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div style={styles.card}>
-          <h4>High Risk Cases</h4>
-          <p style={{ ...styles.bigNumber, color: "#ef4444" }}>
-            {riskSplit.find(x => x.name === "HIGH")?.value || 0}
-          </p>
+        <div style={{ ...styles.card, gridColumn: "1 / -1" }}>
+          <h4>Red Alert Definitions</h4>
+
+          {inventory.map((item, i) => {
+            const risk = getRiskStatus(item.stock, item.forecast);
+            return (
+              <div key={i} style={styles.alertRow}>
+                <strong>{item.item}</strong>
+                <span>{item.stock} / {item.forecast}</span>
+                <span style={{ color: risk.color, fontWeight: 600 }}>
+                  {risk.label}
+                </span>
+                <span>{risk.action}</span>
+              </div>
+            );
+          })}
         </div>
 
       </div>
@@ -159,7 +175,7 @@ export default function RiskDashboard() {
   );
 }
 
-/* ---------------- UI ---------------- */
+/* UI STYLES */
 
 const styles = {
   page: {
@@ -179,27 +195,30 @@ const styles = {
     background: "#fff",
     borderRadius: "10px",
     padding: "16px",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.08)"
+    boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+    position: "relative"
   },
-  bigNumber: {
-    fontSize: "36px",
-    fontWeight: 700,
-    marginTop: "10px"
-  },
-  center: {
-    height: "100vh",
-    display: "flex",
-    justifyContent: "center",
+  alertRow: {
+    display: "grid",
+    gridTemplateColumns: "1.5fr 1fr 1fr 2fr",
+    padding: "10px 0",
+    borderBottom: "1px solid #eee",
     alignItems: "center"
   },
-  warningBox: {
-    background: "#fff7ed",
-    border: "1px solid #fed7aa",
-    color: "#9a3412",
-    padding: "10px 14px",
-    borderRadius: "6px",
-    marginBottom: "14px"
+  centerText: {
+    position: "absolute",
+    top: "58%",
+    left: "50%",
+    transform: "translate(-50%, -50%)",
+    textAlign: "center",
+    pointerEvents: "none"
+  },
+  totalNumber: {
+    fontSize: "34px",
+    fontWeight: 700
+  },
+  subText: {
+    fontSize: "14px",
+    color: "#555"
   }
 };
-
-
