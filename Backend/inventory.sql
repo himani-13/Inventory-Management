@@ -41,5 +41,6 @@ ON sales(product_id, sale_date);
 
 SELECT COUNT(*) FROM Products;
 
-SELECT * from Products;
 
+SELECT * from Products;
+SELECT * from sales;
