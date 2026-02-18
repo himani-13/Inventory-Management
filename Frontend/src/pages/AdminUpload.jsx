@@ -20,7 +20,7 @@ export default function AdminUpload() {
       setLoading(true);
       setMsg("");
 
-      const res = await fetch("http://localhost:8080/api/upload", {
+      const res = await fetch("http://localhost:5000/api/upload", {
         method: "POST",
         body: form
       });

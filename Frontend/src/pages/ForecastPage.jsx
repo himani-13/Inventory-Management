@@ -14,7 +14,7 @@ export default function ForecastPage() {
     const loadProducts = async () => {
       try {
         setError("");
-        const res = await fetch("http://localhost:8080/api/products");
+        const res = await fetch("http://localhost:5000/api/products");
 
         if (!res.ok) {
           throw new Error("Products API failed");
@@ -42,7 +42,7 @@ export default function ForecastPage() {
       setError("");
 
       const res = await fetch(
-        `http://localhost:8080/api/forecast?product=${encodeURIComponent(p)}`
+        `http://localhost:5000/api/forecast?product=${encodeURIComponent(p)}`
       );
 
       if (!res.ok) {
