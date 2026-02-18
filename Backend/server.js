@@ -14,16 +14,16 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/", (req, res) => {
-  res.send("Backend is running 🚀");
+  res.send("Backend is running ");
 });
 
 app.get("/test-db", async (req, res) => {
   try {
     const connection = await db.getConnection();
     connection.release();
-    res.json({ message: "Database connected ✅" });
+    res.json({ message: "Database connected " });
   } catch (error) {
-    res.status(500).json({ error: "Database connection failed ❌" });
+    res.status(500).json({ error: "Database connection failed " });
   }
 });
 

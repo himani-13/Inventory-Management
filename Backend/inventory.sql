@@ -1,4 +1,5 @@
 show databases;
+drop database inventory;
 create database inventory;
 use inventory;
 CREATE TABLE Products(
@@ -42,4 +43,5 @@ ON sales(product_id, sale_date);
 SELECT COUNT(*) FROM Products;
 
 SELECT * from Products;
+SELECT * from Sales;
 

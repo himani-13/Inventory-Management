@@ -3,14 +3,11 @@ const router = express.Router();
 const multer = require("multer");
 const csv = require("csv-parser");
 const fs = require("fs");
-const db = require("../db");
+const db = require("../db"); 
 
-const upload = multer({
-  dest: "uploads/"
-});
+const upload = multer({ dest: "uploads/" });
 
 router.post("/upload", upload.single("file"), (req, res) => {
-
   if (!req.file) {
     return res.status(400).json({ error: "No file uploaded" });
   }
@@ -21,60 +18,63 @@ router.post("/upload", upload.single("file"), (req, res) => {
     .pipe(csv())
     .on("data", (data) => results.push(data))
     .on("end", async () => {
-
-      console.log("CSV rows loaded:", results.length);
+      console.log(`Processing ${results.length} rows...`);
 
       const connection = await db.getConnection();
 
       try {
         await connection.beginTransaction();
-        console.log("Transaction started");
 
         for (const row of results) {
-
           const {
             Date,
-            Product,
             Region,
+            Product,
             Channel,
-            Quantity,
-            Sales,
+            Units_Sold,    
+            Revenue,       
             Cost,
             Profit
           } = row;
 
           let formattedDate = null;
-
-          if (Date && Date.includes("-")) {
-            const [day, month, year] = Date.split("-");
-            formattedDate = `${year}-${month}-${day}`;
+          if (Date) {
+            if (Date.includes("-")) {
+              const [day, month, year] = Date.split("-");
+              formattedDate = `${year}-${month}-${day}`;
+            } else if (Date.includes("/")) {
+               const [day, month, year] = Date.split("/");
+               formattedDate = `${year}-${month}-${day}`;
+            }
           }
 
-          // Check products
-          let [productRows] = await connection.query(
-            "SELECT id FROM products WHERE name = ?",
+         
+          // We check if the product exists to get its ID
+          const [productRows] = await connection.query(
+            "SELECT id FROM Products WHERE name = ?", 
             [Product]
           );
 
           let productId;
 
           if (productRows.length === 0) {
-            const [insertProduct] = await connection.query(
-              "INSERT INTO products (name) VALUES (?)",
+            // Create new product
+            const [insertResult] = await connection.query(
+              "INSERT INTO Products (name) VALUES (?)",
               [Product]
             );
-            productId = insertProduct.insertId;
+            productId = insertResult.insertId;
 
-            // Insert Stock row
+            // Initialize Stock for new product
             await connection.query(
-              "INSERT INTO stock (product_id, current_stock, safety_buffer) VALUES (?, 0, 50)",
+              "INSERT INTO Stock (product_id, current_stock, safety_buffer) VALUES (?, 0, 50)",
               [productId]
             );
           } else {
             productId = productRows[0].id;
           }
 
-          // Insert sales record
+         
           await connection.query(
             `INSERT INTO sales 
             (sale_date, product_id, region, channel, quantity, sales, cost, profit)
@@ -82,10 +82,10 @@ router.post("/upload", upload.single("file"), (req, res) => {
             [
               formattedDate,
               productId,
-              Region || null,
-              Channel || null,
-              Number(Quantity) || 0,
-              Number(Sales) || 0,
+              Region,
+              Channel,
+              Number(Units_Sold) || 0,  
+              Number(Revenue) || 0,     
               Number(Cost) || 0,
               Number(Profit) || 0
             ]
@@ -93,20 +93,16 @@ router.post("/upload", upload.single("file"), (req, res) => {
         }
 
         await connection.commit();
-        console.log("Transaction committed successfully");
-
-        res.json({
-          message: "Data inserted successfully",
-          totalRows: results.length
-        });
+        console.log("Transaction committed.");
+        res.json({ message: "Data inserted successfully", totalRows: results.length });
 
       } catch (error) {
         await connection.rollback();
-        console.error("DB ERROR:", error);
-        res.status(500).json({ error: error.message });
+        console.error("DB Transaction Error:", error);
+        res.status(500).json({ error: "Database error during upload." });
       } finally {
         connection.release();
-        fs.unlinkSync(req.file.path);
+        if (req.file && req.file.path) fs.unlinkSync(req.file.path);
       }
     });
 });
