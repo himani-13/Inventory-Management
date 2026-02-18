@@ -44,5 +44,5 @@ SELECT COUNT(*) FROM Products;
 
 
 SELECT * from Products;
-SELECT * from Sales;
+SELECT * from sales;
 
